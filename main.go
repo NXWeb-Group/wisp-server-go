@@ -60,13 +60,11 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 		switch frame.Type {
 		case types.CONNECT:
-			log.Printf("%v", frame.StreamID)
 			connect, err := utils.ParseConnect(frame.Payload)
 			if err != nil {
 				log.Printf("Error parsing CONNECT frame: %v", err)
 				break
 			}
-			log.Printf("Received CONNECT frame with StreamID: %v, Port: %d, Host: %s", frame.StreamID, connect.Port, connect.Host)
 
 			switch connect.Type {
 			case types.TCP:
@@ -91,6 +89,23 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 				if err != nil {
 					log.Printf("Error writing to TCP socket: %v", err)
 				}
+				socket.Buffer -= 1
+				streams.Mutex.Lock()
+				if socket.Buffer == 0 {
+					socket.Buffer = 127
+					go func() {
+						wsmutex.Lock()
+						conn.WriteMessage(websocket.BinaryMessage, utils.SerializeFrame(types.WispFrame{
+							Type:     types.CONTINUE,
+							StreamID: frame.StreamID,
+							Payload:  payload,
+						}))
+						wsmutex.Unlock()
+					}()
+				}
+				streams.Sockets[frame.StreamID] = socket
+				streams.Mutex.Unlock()
+
 			} else if socket.UDP != nil {
 				_, err := socket.UDP.Write(frame.Payload)
 				if err != nil {
@@ -99,15 +114,34 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			} else {
 				log.Printf("No active socket for StreamID: %d", frame.StreamID)
 			}
-
-		case types.CONTINUE:
-			// log.Printf("Received CONTINUE frame with StreamID: %d, Payload: %s", frame.StreamID, string(frame.Payload))
 		case types.CLOSE:
-			// log.Printf("Received CLOSE frame with StreamID: %d", frame.StreamID)
+			log.Printf("Received CLOSE frame with StreamID: %d", frame.StreamID)
+			streams.Mutex.Lock()
+			if socket, exists := streams.Sockets[frame.StreamID]; exists {
+				if socket.TCP != nil {
+					socket.TCP.Close()
+				}
+				if socket.UDP != nil {
+					socket.UDP.Close()
+				}
+				delete(streams.Sockets, frame.StreamID)
+			}
+			streams.Mutex.Unlock()
 		default:
 			log.Printf("Received unknown frame type: %d", frame.Type)
 		}
 	}
+
+	streams.Mutex.Lock()
+	for _, socket := range streams.Sockets {
+		if socket.TCP != nil {
+			socket.TCP.Close()
+		}
+		if socket.UDP != nil {
+			socket.UDP.Close()
+		}
+	}
+	streams.Mutex.Unlock()
 
 	log.Println("Client disconnected")
 }

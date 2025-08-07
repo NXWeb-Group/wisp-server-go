@@ -14,23 +14,25 @@ func TCPSocket(conn *websocket.Conn, connect types.Connect, frame types.WispFram
 	socket, err := net.Dial("tcp", net.JoinHostPort(string(connect.Host), fmt.Sprintf("%d", connect.Port)))
 	if err != nil {
 		log.Printf("Error connecting to TCP socket: %v", err)
+		wsmutex.Lock()
+		conn.WriteMessage(websocket.BinaryMessage, SerializeFrame(types.WispFrame{
+			Type:     types.CLOSE,
+			StreamID: frame.StreamID,
+			Payload:  []byte{0x01},
+		}))
+		wsmutex.Unlock()
 		return
 	}
 
 	streams.Mutex.Lock()
 	socketEntry := streams.Sockets[frame.StreamID]
 	socketEntry.TCP = socket.(*net.TCPConn)
+	socketEntry.Buffer = 127
 	streams.Sockets[frame.StreamID] = socketEntry
 	streams.Mutex.Unlock()
 
-	log.Printf("Connected to TCP socket: %s", net.JoinHostPort(string(connect.Host), fmt.Sprintf("%d", connect.Port)))
-
 	go func() {
 		defer func() {
-			streams.Mutex.Lock()
-			delete(streams.Sockets, frame.StreamID)
-			streams.Mutex.Unlock()
-			socket.Close()
 			wsmutex.Lock()
 			conn.WriteMessage(websocket.BinaryMessage, SerializeFrame(types.WispFrame{
 				Type:     types.CLOSE,
@@ -38,6 +40,11 @@ func TCPSocket(conn *websocket.Conn, connect types.Connect, frame types.WispFram
 				Payload:  []byte{0x02},
 			}))
 			wsmutex.Unlock()
+			streams.Mutex.Lock()
+			delete(streams.Sockets, frame.StreamID)
+			streams.Mutex.Unlock()
+			socket.Close()
+
 		}()
 		buffer := make([]byte, 4096)
 		for {

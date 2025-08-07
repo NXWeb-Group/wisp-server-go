@@ -34,8 +34,9 @@ const (
 )
 
 type Socket struct {
-	TCP *net.TCPConn
-	UDP *net.UDPConn
+	TCP    *net.TCPConn
+	UDP    *net.UDPConn
+	Buffer uint32
 }
 
 type Streams struct {
