@@ -81,7 +81,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			socket, exists := streams.Sockets[frame.StreamID]
 			streams.Mutex.RUnlock()
 			if !exists {
-				log.Printf("No socket found for StreamID: %d", frame.StreamID)
+				// log.Printf("No socket found for StreamID: %d", frame.StreamID)
 				break
 			}
 

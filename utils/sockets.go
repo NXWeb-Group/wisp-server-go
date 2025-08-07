@@ -46,11 +46,10 @@ func TCPSocket(conn *websocket.Conn, connect types.Connect, frame types.WispFram
 			socket.Close()
 
 		}()
-		buffer := make([]byte, 4096)
+		buffer := make([]byte, 32768)
 		for {
 			n, err := socket.Read(buffer)
 			if err != nil {
-				// log.Printf("Error reading from TCP socket: %v", err)
 				break
 			}
 			if n > 0 {
