@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"log"
 	"net/http"
+	"os"
 	"sync"
 
 	"github.com/NXWeb-Group/wisp-server-go/types"
@@ -150,6 +151,10 @@ func main() {
 	http.HandleFunc("/wisp/", handleWebSocket)
 
 	port := ":8080"
+	if len(os.Args) > 1 {
+		port = ":" + os.Args[1]
+	}
+
 	log.Printf("Starting WebSocket server on %s", port)
 	log.Fatal(http.ListenAndServe(port, nil))
 }
